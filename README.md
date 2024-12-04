@@ -5,10 +5,11 @@ Allows you to create one-page information, usually important metrics about the i
 ## REQURIREMENTS
 
 1. Have OpenAI's API_KEY.
-2. Have a `35stocks.xlsx` file - It should have the two important metrics regarding the stock like P/E TTM, Dividend Yield etc etc. Example file is attached.
+2. Have a `35stocks.xlsx` file - It should have the important metrics regarding the stock like P/E TTM, Dividend Yield etc etc. Example file is attached.
 3. Have a `35stockscomparable.xlsx` file - List its comparable companies (Something closer to its industry or whatever.)
 
-The use of the xlsx files : The important metrics for a stock as mentioned in `35stocks.xlsx`, they are important as in each company is different and can't be compared based on a fixed metric. The other file(`35stockscomparable.xlsx`) lets us get a mean value of the important metric selected and color code the selected important metric in the pdf file.
+The use of the xlsx files : The important metrics for a stock as mentioned in `35stocks.xlsx`, they are important as in each company is different and can't be compared based on a fixed metric. The other file(`35stockscomparable.xlsx`) lets us get a mean value(of its peers) of the important metric selected and color code the selected important metric in the pdf file for the entered stock.
+For all metrics other than Dividend Yield, the lesser the value from its mean the better (Hence green) and vica versa for Dividend Yield (better if more than mean hence green).
 
 You can have as many important metric as you can, just make sure to add them under the existing metrics in the excel file or just use as you wish.
 
