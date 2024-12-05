@@ -483,7 +483,7 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics):
                 print(f"Dividend Yield: {all_content['info']['dividendYield']*100:.2f}%")
         events_content = events_output.getvalue()
         sys.stdout = sys.__stdout__
-        def process_section(content, story):
+        def process_section(content, story, bullets=False):
             lines = content.split('\n')
             headers = ["COMPANY OVERVIEW", "BUSINESS AND MARKET POSITION", "FINANCIAL TABLE", "KEY STRENGTHS", "GROWTH CATALYSTS", "INVESTMENT THESIS", "RISK ANALYSIS AND MITIGATION", "UPCOMING EVENTS", "PRICE CHART"]
             bold_lines = ["Company Name:", "Industry:", "Sector:", "Business Description:", "Market Position:", "Key Statistics:", "Financial Health:", "Analyst Insights:", "Market & Competition Risks:", "1. Market Sensitivity Risk", "2. Industry Competition Risk", "Ex-Dividend Date:", "Dividend Rate:", "Dividend Yield:"]
@@ -495,7 +495,11 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics):
                     elif any(bold_line in line.strip() for bold_line in bold_lines):
                         if ':' in line:
                             key, value = line.split(":", 1)
-                            story.append(Paragraph(f'<b>{key.strip()}</b>: {value.strip()}', normal_style))
+                            if bullets :
+                                story.append(Paragraph(f'  • <b>{key.strip()}</b>: {value.strip()}', normal_style))
+                            else : 
+                                story.append(Paragraph(f'<b>{key.strip()}</b>: {value.strip()}', normal_style))
+
                     else:
                         story.append(Paragraph(line, normal_style))
         overview_content_list = []
@@ -647,7 +651,7 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics):
         
         left_analysis.append(insights_table)
         events_content_list = []
-        process_section(events_content, events_content_list)
+        process_section(events_content, events_content_list, True)
         left_wrapper = Table([[left_analysis],[events_content_list]], colWidths=[doc.width/2.0 - 20])
         left_wrapper.setStyle(TableStyle([('LEFTPADDING', (0, 0), (-1, -1), -5), ('RIGHTPADDING', (0, 0), (-1, -1), 10)]))
 
