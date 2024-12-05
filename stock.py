@@ -186,7 +186,7 @@ def get_company_info(stock_info):
         print(f"Error getting company info: {e}")
 
 
-def get_business_details(stock_info, metrics,comparable_metrics):
+def get_business_details(stock_info):
     try:
         print("\nBUSINESS AND MARKET POSITION")
         if stock_info.get('marketCap'):
@@ -202,7 +202,7 @@ def get_business_details(stock_info, metrics,comparable_metrics):
     except Exception as e:
         print(f"Error getting business details: {e}")
 
-def get_investment_thesis(ticker, stock_info):
+def get_investment_thesis(stock_info):
     try:
         print("\nINVESTMENT THESIS")
 
@@ -448,7 +448,7 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics):
         overview_content = overview_output.getvalue()
         business_output = io.StringIO()
         sys.stdout = business_output
-        get_business_details(all_content['info'], final_metrics, comparable_metrics)
+        get_business_details(all_content['info'])
         business_content = business_output.getvalue()
         financial_output = io.StringIO()
         sys.stdout = financial_output
@@ -464,7 +464,7 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics):
         catalysts_content = catalysts_output.getvalue()
         analysis_output = io.StringIO()
         sys.stdout = analysis_output
-        get_investment_thesis(ticker, all_content['info'])
+        get_investment_thesis(all_content['info'])
         get_risk_analysis(ticker)
         analysis_content = analysis_output.getvalue()
         events_output = io.StringIO()
@@ -496,7 +496,7 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics):
                         if ':' in line:
                             key, value = line.split(":", 1)
                             if bullets :
-                                story.append(Paragraph(f'  • <b>{key.strip()}</b>: {value.strip()}', normal_style))
+                                story.append(Paragraph(f'\u00A0\u00A0• <b>{key.strip()}</b>: {value.strip()}', normal_style))
                             else : 
                                 story.append(Paragraph(f'<b>{key.strip()}</b>: {value.strip()}', normal_style))
 
