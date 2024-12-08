@@ -836,12 +836,73 @@ def extract_ticker(s):
         print(f"Error details: {e}")
         return s
 
+def get_dividend_history(ticker):
+    url = f"https://api.nasdaq.com/api/quote/{ticker}/dividends?assetclass=stocks"
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+        'Referer': 'https://www.nasdaq.com/'
+    }
+    
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    filename=""
+    if data['data']:
+        df = pd.DataFrame(data['data']['dividends']['rows'])
+        filename = f'{ticker}_dividend_history.txt'
+        df.to_csv(filename, sep='|', index=False)
+        return filename
+    return ""
+    
+def get_fed_rate():
+    url = "https://fred.stlouisfed.org/series/FEDFUNDS"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'text/html'
+    }
+    
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    rate = soup.find('span', {'class': 'series-meta-observation-value'}).text
+    return float(rate)
+
+def calculate_dividend_growth(filename):
+   df = pd.read_csv(filename, sep='|')
+   df['amount'] = df['amount'].str.replace('$', '').astype(float)
+   
+   recent_sum = df['amount'][:4].sum()
+   previous_sum = df['amount'][4:8].sum()
+   dividend_growth = recent_sum - previous_sum
+   growth_rate = int((dividend_growth / previous_sum) * 100 * 100) / 100   
+   return growth_rate
+   
+
+def get_GGM(forward_dividend,fed_rate,beta,spy_total_return, dividend_growth) :
+    expected_price = forward_dividend/(fed_rate + (beta*(spy_total_return - fed_rate))-dividend_growth)
+    return expected_price
+
 def main():
         try:
             ticker = input("\nEnter Stock Ticker (or 'quit' to exit): ").upper()
             print("\nFetching data...")
             stock = yf.Ticker(ticker)
 
+            forward_dividend = stock.info['dividendRate']
+            scrape_dump = get_dividend_history(ticker.lower())
+            dividend_growth = calculate_dividend_growth(scrape_dump)
+            fed_rate = get_fed_rate()/100
+            beta = stock.info['beta']
+            
+            spy = yf.Ticker("SPY")
+            hist = spy.history(period="1y")
+            start_price = hist['Close'].iloc[0]
+            end_price = hist['Close'].iloc[-1]
+
+            spy_total_return = round(((end_price - start_price) / start_price) * 100, 2)
+            print(forward_dividend,fed_rate,beta,spy_total_return, dividend_growth)
+
+            ggm = get_GGM(forward_dividend,fed_rate,beta,spy_total_return, dividend_growth)
+            print(ggm)
             file_path = '35stocks.xlsx'
             df = pd.read_excel(file_path, sheet_name='Sheet1')
             df_transposed = df.T
