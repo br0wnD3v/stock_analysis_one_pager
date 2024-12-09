@@ -969,7 +969,7 @@ def main():
                 for company in column_data:
                     try:
                         ticker_symbol = extract_ticker(company)
-                        if ticker_symbol:
+                        if ticker_symbol and ticker_symbol.lower() != "private":
                             comparable_companies.append(ticker_symbol)
                     except Exception as e:
                         print(f"Error processing company: {company}")
@@ -1015,13 +1015,18 @@ def main():
             comparable_companies_selected = []
             for tick in comparable_companies:
                 try:
-                    comparable_info = yf.Ticker(tick).info
-                    comparable_debt_equity.append(comparable_info['debtToEquity'])
-                    comparable_current_ratio.append(comparable_info['currentRatio'])
-                    current_price = comparable_info.get('currentPrice', comparable_info.get('regularMarketPrice'))
-                    upside = ((comparable_info['targetMeanPrice'] / current_price) - 1) * 100
-                    comparable_upside.append(upside)
-                    comparable_companies_selected.append(tick)
+                    if(tick.lower() == "private") :
+                        comparable_debt_equity.append(0)
+                        comparable_current_ratio.append(0)
+                        comparable_upside.append(0)
+                    else:
+                        comparable_info = yf.Ticker(tick).info
+                        comparable_debt_equity.append(comparable_info['debtToEquity'])
+                        comparable_current_ratio.append(comparable_info['currentRatio'])
+                        current_price = comparable_info.get('currentPrice', comparable_info.get('regularMarketPrice'))
+                        upside = ((comparable_info['targetMeanPrice'] / current_price) - 1) * 100
+                        comparable_upside.append(upside)
+                        comparable_companies_selected.append(tick)
                 except:
                     comparable_debt_equity.append(0)
                     comparable_current_ratio.append(0)
