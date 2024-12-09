@@ -20,6 +20,20 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.6668.101 Safari/537.36'
 }
 
+
+def get_stock_price(ticker):
+    url = f'https://finance.yahoo.com/quote/{ticker}/key-statistics/'
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.content, 'lxml')
+    price_element = soup.find('fin-streamer', {'data-field': 'regularMarketPrice'})
+    stock_price = None
+    
+    if price_element:
+        stock_price = price_element.get('data-value')
+        return float(stock_price)
+    
+    return 0
+
 """P/E TTM"""
 def get_trailing_pe(ticker):
     url = f'https://finance.yahoo.com/quote/{ticker}/key-statistics/'
@@ -378,6 +392,36 @@ def get_stock_catalysts(ticker):
         print("Error analyzing catalysts:", e)
 
 
+def get_assets_under_management_ratio(ticker):
+    try:
+        # strengths = []
+        content = f'Only give one word answers, Whats ${ticker} Assets Under management numeric value. Without commas or $ sign.'
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                   "role": "user",
+                    "content": [
+                        {
+                            "type":"text",
+                            "text":content
+                        }
+                    ]
+                }
+            ]
+        )
+        stock_price = get_stock_price(ticker)
+        aum = int(completion.choices[0].message.content)
+        aum = aum/1000000000    
+        
+        ratio = stock_price/aum
+        return ratio
+
+
+    except Exception as e:
+        return 0
+
+
 def get_metric_color(metric_name, stock_value, comparable_value):
     """
     Determine the color for a metric based on comparison with comparable companies
@@ -418,22 +462,27 @@ def get_metric_value(ticker, metric_name):
     """
     Get metric value from Yahoo Finance
     """
-    if metric_name == "EV/EBITDA":
-        return get_ev_ebitda(ticker)
-    elif metric_name == "P/E TTM":
-        return get_trailing_pe(ticker)
-    elif metric_name == "P/NAV":
-        return get_price_book(ticker)
-    elif metric_name == "Dividend Yield":
-        return get_divident_yield(ticker)
-    elif metric_name == "P/S TTM":
-        return get_price_sales(ticker)
-    return 0
+    if ticker == 'PRIVATE' or ticker == 'Private' or ticker.lower() == 'private':
+        return 0
+    else :
+        if metric_name == "EV/EBITDA":
+            return get_ev_ebitda(ticker)
+        elif metric_name == "P/E TTM":
+            return get_trailing_pe(ticker)
+        elif metric_name == "P/NAV":
+            return get_price_book(ticker)
+        elif metric_name == "Dividend Yield":
+            return get_divident_yield(ticker)
+        elif metric_name == "P/S TTM":
+            return get_price_sales(ticker)
+        elif metric_name == 'P/AUM':
+            return get_assets_under_management_ratio(ticker)
+        return 0
 
 def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, comparable_debt_equity, comparable_current_ratio, comparable_upside):
     try:
         filename = f"{ticker}_Analysis_{datetime.now().strftime('%Y%m%d')}.pdf"
-        margins = (20, 15, 15, 15)
+        margins = (15, 10, 10, 10)
         doc = SimpleDocTemplate(filename, pagesize=letter, leftMargin=margins[0], rightMargin=margins[1], topMargin=margins[2], bottomMargin=margins[3])
         styles = getSampleStyleSheet()
         story = []
@@ -459,16 +508,23 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, co
                     return '#FFA500'  # orange
                 else:
                     return '#FF0000'  # red
-            else:
-                # Lower values are better for Debt/Equity and we want Current Ratio close to optimal (1-1.5)
-                if metric_name == "Current Ratio":
+            elif metric_name == "Current Ratio":
                     if 1.0 <= stock_value <= 1.5:
                         return '#008000'  # green
                     elif 0.8 <= stock_value < 1.0 or 1.5 < stock_value <= 2.0:
                         return '#FFA500'  # orange
                     else:
                         return '#FF0000'  # red
-                else:  # Debt/Equity
+                    
+            elif metric_name == 'P/AUM':
+                    if(percentage_diff < 0):
+                        return '#008000'  # orange    
+                    elif 0 < percentage_diff < 10:
+                        return '#FFA500'  # orange
+                    else :
+                        return '#FF0000'  # red
+
+            else:  # Debt/Equity
                     if percentage_diff < -10:
                         return '#008000'  # green
                     elif percentage_diff <= 10:
@@ -886,23 +942,6 @@ def main():
             ticker = input("\nEnter Stock Ticker (or 'quit' to exit): ").upper()
             print("\nFetching data...")
             stock = yf.Ticker(ticker)
-
-            forward_dividend = stock.info['dividendRate']
-            scrape_dump = get_dividend_history(ticker.lower())
-            dividend_growth = calculate_dividend_growth(scrape_dump)
-            fed_rate = get_fed_rate()/100
-            beta = stock.info['beta']
-            
-            spy = yf.Ticker("SPY")
-            hist = spy.history(period="1y")
-            start_price = hist['Close'].iloc[0]
-            end_price = hist['Close'].iloc[-1]
-
-            spy_total_return = round(((end_price - start_price) / start_price) * 100, 2)
-            print(forward_dividend,fed_rate,beta,spy_total_return, dividend_growth)
-
-            ggm = get_GGM(forward_dividend,fed_rate,beta,spy_total_return, dividend_growth)
-            print(ggm)
             file_path = '35stocks.xlsx'
             df = pd.read_excel(file_path, sheet_name='Sheet1')
             df_transposed = df.T
@@ -945,18 +984,23 @@ def main():
                 considered_companies = 0
                 metric_sum = 0
                 for tick in comparable_companies:
-                    if metric == "EV/EBITDA":
-                        metric_value = get_ev_ebitda(tick) 
-                    elif metric == "P/E TTM":
-                        metric_value = get_trailing_pe(tick)
-                    elif metric == "P/NAV":
-                        metric_value = get_price_book(tick)
-                    elif metric == "Dividend Yield":
-                        metric_value = get_divident_yield(tick)
-                    elif metric == "P/S TTM":
-                        metric_value = get_price_sales(tick)
-                    else:
+                    if tick == 'PRIVATE' or tick=='Private' or tick.lower() == 'private':
                         metric_value = 0
+                    else :
+                        if metric == "EV/EBITDA":
+                            metric_value = get_ev_ebitda(tick) 
+                        elif metric == "P/E TTM":
+                            metric_value = get_trailing_pe(tick)
+                        elif metric == "P/NAV":
+                            metric_value = get_price_book(tick)
+                        elif metric == "Dividend Yield":
+                            metric_value = get_divident_yield(tick)
+                        elif metric == "P/S TTM":
+                            metric_value = get_price_sales(tick)
+                        elif metric == "P/AUM":
+                            metric_value = get_assets_under_management_ratio(tick)
+                        else:
+                            metric_value = 0
     
                     if metric_value > 0 :
                         considered_companies += 1
