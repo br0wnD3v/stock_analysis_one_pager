@@ -20,7 +20,9 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.6668.101 Safari/537.36'
 }
 
+comparable_yf_fetched_information = {}
 
+"""Stock Price"""
 def get_stock_price(ticker):
     url = f'https://finance.yahoo.com/quote/{ticker}/key-statistics/'
     response = requests.get(url, headers=headers)
@@ -33,6 +35,37 @@ def get_stock_price(ticker):
         return float(stock_price)
     
     return 0
+
+"""P/AUM"""
+def get_assets_under_management_ratio(ticker):
+    try:
+        # strengths = []
+        content = f'Only give one word answers, Whats ${ticker} Assets Under management numeric value. Without commas or $ sign.'
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                   "role": "user",
+                    "content": [
+                        {
+                            "type":"text",
+                            "text":content
+                        }
+                    ]
+                }
+            ]
+        )
+        stock_price = get_stock_price(ticker)
+        aum = int(completion.choices[0].message.content)
+        aum = aum/1000000000    
+        
+        ratio = stock_price/aum
+        return ratio
+
+
+    except Exception as e:
+        return 0
+
 
 """P/E TTM"""
 def get_trailing_pe(ticker):
@@ -59,6 +92,8 @@ def get_trailing_pe(ticker):
         return 0
     
     return pe_value_float
+
+    
 
 """EV/EBITDA"""
 def get_ev_ebitda(ticker):
@@ -115,24 +150,6 @@ def get_price_sales(ticker):
     
     return ps_value_float
 
-"""Dividend Yield"""
-# Loop through each ticker symbol in the list
-def get_divident_yield(ticker):
-        stock = yf.Ticker(ticker)
-        info = stock.info
-
-        # Get the Forward Dividend Yield information
-        dividend_yield = info.get("dividendYield")  # As a decimal (e.g., 0.05 for 5%)
-
-        # Display the Forward Dividend Yield in the specified format
-        if dividend_yield:
-            yield_percentage = dividend_yield * 100
-        else:
-            print(f"Could not find DY for {ticker}")
-            return 0
-        
-        return yield_percentage
-
 # Function to extract Price/Book for a given ticker
 """P/NAV OR P/B TTM"""
 def get_price_book(ticker):
@@ -159,6 +176,52 @@ def get_price_book(ticker):
         return 0
     
     return pb_value_float   
+
+"""Price to FFO"""
+def get_pffo(ticker):
+    try:
+        info = comparable_yf_fetched_information[ticker]
+        financials = info['financials']  # Income statement data
+        balance_sheet = info['balance_sheet']  # Balance sheet data
+        price = get_stock_price(ticker)
+        shares_count = balance_sheet.loc['Ordinary Shares Number'].iloc[0]
+        
+        if not financials.empty:
+            net_income = financials.loc['Net Income Including Noncontrolling Interests', financials.columns[0]]
+            reconciled_depreciation = financials.loc['Reconciled Depreciation', financials.columns[0]]
+            
+            # Either use 'Gain On Sale Of Business' instead, or set to 0 if not available
+            try:
+                gain_on_sale = financials.loc['Gain On Sale Of Business', financials.columns[0]]
+            except KeyError:
+                gain_on_sale = 0
+                
+            total = net_income + reconciled_depreciation + gain_on_sale
+            FFO_per_share = total / shares_count if shares_count != 0 else None
+            P_FFO = price / FFO_per_share if FFO_per_share and FFO_per_share != 0 else None
+
+            return P_FFO 
+        return 0
+    except:
+        return 0
+
+"""Dividend Yield"""
+# Loop through each ticker symbol in the list
+def get_divident_yield(ticker):
+        info = comparable_yf_fetched_information[ticker]['info']
+
+        # Get the Forward Dividend Yield information
+        dividend_yield = info.get("dividendYield")  # As a decimal (e.g., 0.05 for 5%)
+
+        # Display the Forward Dividend Yield in the specified format
+        if dividend_yield:
+            yield_percentage = dividend_yield * 100
+        else:
+            print(f"Could not find DY for {ticker}")
+            return 0
+        
+        return yield_percentage
+
 
 
 def convert_pdf2docx(input_file: str, output_file: str):
@@ -392,34 +455,6 @@ def get_stock_catalysts(ticker):
         print("Error analyzing catalysts:", e)
 
 
-def get_assets_under_management_ratio(ticker):
-    try:
-        # strengths = []
-        content = f'Only give one word answers, Whats ${ticker} Assets Under management numeric value. Without commas or $ sign.'
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                   "role": "user",
-                    "content": [
-                        {
-                            "type":"text",
-                            "text":content
-                        }
-                    ]
-                }
-            ]
-        )
-        stock_price = get_stock_price(ticker)
-        aum = int(completion.choices[0].message.content)
-        aum = aum/1000000000    
-        
-        ratio = stock_price/aum
-        return ratio
-
-
-    except Exception as e:
-        return 0
 
 
 def get_metric_color(metric_name, stock_value, comparable_value):
@@ -439,6 +474,14 @@ def get_metric_color(metric_name, stock_value, comparable_value):
         elif percentage_diff >= -10:
             return '#FFA500'  # orange
         else:
+            return '#FF0000'  # red
+        
+    elif metric_name == 'PricePrice-to-FFO':
+        if percentage_diff < -10:
+            return '#008000'  # green
+        elif 10 > percentage_diff >= -10:
+            return '#FFA500'  # orange
+        if percentage_diff > 10 :
             return '#FF0000'  # red
     else:
         # Lower values are better for other metrics
@@ -477,7 +520,10 @@ def get_metric_value(ticker, metric_name):
             return get_price_sales(ticker)
         elif metric_name == 'P/AUM':
             return get_assets_under_management_ratio(ticker)
-        return 0
+        elif metric_name == 'Price-to-FFO':
+            return get_pffo(ticker)
+        else :
+            return 0
 
 def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, comparable_debt_equity, comparable_current_ratio, comparable_upside):
     try:
@@ -509,28 +555,26 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, co
                 else:
                     return '#FF0000'  # red
             elif metric_name == "Current Ratio":
-                    if 1.0 <= stock_value <= 1.5:
-                        return '#008000'  # green
-                    elif 0.8 <= stock_value < 1.0 or 1.5 < stock_value <= 2.0:
-                        return '#FFA500'  # orange
-                    else:
-                        return '#FF0000'  # red
-                    
+                if 15 <= stock_value:
+                    return '#008000'  # green
+                elif 0.0 <= stock_value < 15:
+                    return '#FFA500'  # orange
+                else:
+                    return '#FF0000'  # red
             elif metric_name == 'P/AUM':
-                    if(percentage_diff < 0):
-                        return '#008000'  # orange    
-                    elif 0 < percentage_diff < 10:
-                        return '#FFA500'  # orange
-                    else :
-                        return '#FF0000'  # red
-
+                if(percentage_diff < 0):
+                    return '#008000'  # orange    
+                elif 0 < percentage_diff < 10:
+                    return '#FFA500'  # orange
+                else :
+                    return '#FF0000'  # red
             else:  # Debt/Equity
-                    if percentage_diff < -10:
-                        return '#008000'  # green
-                    elif percentage_diff <= 10:
-                        return '#FFA500'  # orange
-                    else:
-                        return '#FF0000'  # red
+                if percentage_diff < -10:
+                    return '#008000'  # green
+                elif percentage_diff <= 10:
+                    return '#FFA500'  # orange
+                else:
+                    return '#FF0000'  # red
 
         # Capture different sections
         overview_output = io.StringIO()
@@ -938,10 +982,24 @@ def get_GGM(forward_dividend,fed_rate,beta,spy_total_return, dividend_growth) :
     return expected_price
 
 def main():
-        try:
+        # try:
             ticker = input("\nEnter Stock Ticker (or 'quit' to exit): ").upper()
             print("\nFetching data...")
+
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=365)
+
             stock = yf.Ticker(ticker)
+            all_content = {
+                'financials':stock.financials,
+                'info': stock.info,
+                'income_stmt': stock.income_stmt,
+                'balance_sheet': stock.balance_sheet,
+                'news': stock.news,
+                'history_data':stock.history(start=start_date, end=end_date)
+            }
+            comparable_yf_fetched_information[ticker] = all_content
+            
             file_path = '35stocks.xlsx'
             df = pd.read_excel(file_path, sheet_name='Sheet1')
             df_transposed = df.T
@@ -978,15 +1036,53 @@ def main():
             else:
                 print(f"\n{ticker} not found in columns!")
 
+            comparable_debt_equity = []
+            comparable_current_ratio = []
+            comparable_upside = []
+            comparable_companies_selected = []
+            for tick in comparable_companies:
+                try:
+                    if(tick.lower() == "private") :
+                        comparable_debt_equity.append(0)
+                        comparable_current_ratio.append(0)
+                        comparable_upside.append(0)
+                    else:
+                        comparable_info = yf.Ticker(tick)
+                        comparable_stock_info = comparable_info.info
+                        comparable_all_content = {
+                            'financials':comparable_info.financials,
+                            'info': comparable_info.info,
+                            'income_stmt': comparable_info.income_stmt,
+                            'balance_sheet': comparable_info.balance_sheet,
+                            'news': comparable_info.news,
+                            'history_data':comparable_info.history(start=start_date, end=end_date)
+  }
+                        comparable_yf_fetched_information[tick] = comparable_all_content
+
+                        comparable_debt_equity.append(comparable_stock_info['debtToEquity'])
+                        comparable_current_ratio.append(comparable_stock_info['currentRatio'])
+                        current_price = comparable_stock_info.get('currentPrice', comparable_stock_info.get('regularMarketPrice'))
+                        upside = ((comparable_stock_info['targetMeanPrice'] / current_price) - 1) * 100
+                        comparable_upside.append(upside)
+                        comparable_companies_selected.append(tick)
+                except:
+                    comparable_debt_equity.append(0)
+                    comparable_current_ratio.append(0)
+                    comparable_upside.append(0)
+
+            comparable_de_mean = sum(comparable_debt_equity) / len(comparable_debt_equity)
+            comparable_cr_mean = sum(comparable_current_ratio) / len(comparable_current_ratio)
+            comparable_up_mean = sum(comparable_upside) / len(comparable_upside)
 
             comparable_metrics = []
             for metric in final_metrics:
+                print("METRIC : ",metric)
                 considered_companies = 0
                 metric_sum = 0
                 for tick in comparable_companies:
                     if tick == 'PRIVATE' or tick=='Private' or tick.lower() == 'private':
                         metric_value = 0
-                    else :
+                    else:
                         if metric == "EV/EBITDA":
                             metric_value = get_ev_ebitda(tick) 
                         elif metric == "P/E TTM":
@@ -999,63 +1095,30 @@ def main():
                             metric_value = get_price_sales(tick)
                         elif metric == "P/AUM":
                             metric_value = get_assets_under_management_ratio(tick)
+                        elif metric == "Price-to-FFO":
+                            metric_value = get_pffo(tick)
                         else:
                             metric_value = 0
-    
-                    if metric_value > 0 :
+
+                    # Move this outside the else block
+                    if metric_value > 0:
                         considered_companies += 1
                         metric_sum += metric_value
 
-                comparable_metrics.append(metric_sum/considered_companies)
-
-
-            comparable_debt_equity = []
-            comparable_current_ratio = []
-            comparable_upside = []
-            comparable_companies_selected = []
-            for tick in comparable_companies:
-                try:
-                    if(tick.lower() == "private") :
-                        comparable_debt_equity.append(0)
-                        comparable_current_ratio.append(0)
-                        comparable_upside.append(0)
-                    else:
-                        comparable_info = yf.Ticker(tick).info
-                        comparable_debt_equity.append(comparable_info['debtToEquity'])
-                        comparable_current_ratio.append(comparable_info['currentRatio'])
-                        current_price = comparable_info.get('currentPrice', comparable_info.get('regularMarketPrice'))
-                        upside = ((comparable_info['targetMeanPrice'] / current_price) - 1) * 100
-                        comparable_upside.append(upside)
-                        comparable_companies_selected.append(tick)
-                except:
-                    comparable_debt_equity.append(0)
-                    comparable_current_ratio.append(0)
-                    comparable_upside.append(0)
-
-            comparable_de_mean = sum(comparable_debt_equity) / len(comparable_debt_equity)
-            comparable_cr_mean = sum(comparable_current_ratio) / len(comparable_current_ratio)
-            comparable_up_mean = sum(comparable_upside) / len(comparable_upside)
-
-            all_content = {
-                'info': stock.info,
-                'income_stmt': stock.income_stmt,
-                'balance_sheet': stock.balance_sheet,
-                'news': stock.news
-            }
-
-            # Get historical data for the chart
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=365)
-            all_content['history_data'] = stock.history(start=start_date, end=end_date)
+                # Add safety check before division
+                if considered_companies > 0:
+                    comparable_metrics.append(metric_sum/considered_companies)
+                else:
+                    comparable_metrics.append(0)  # or whatever default value you want to use\
 
             # # Create PDF report
             print("\nGenerating PDF report...")
             create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, comparable_de_mean, comparable_cr_mean, comparable_up_mean)
          
 
-        except Exception as e:
-            print(f"Error processing request: {e}")
-            print("Please try again with a valid ticker symbol.")
+        # except Exception as e:
+        #     print(f"Error processing request: {e}")
+        #     print("Please try again with a valid ticker symbol.")
 
 if __name__ == "__main__":
     print("Stock Financial Analysis Tool")
