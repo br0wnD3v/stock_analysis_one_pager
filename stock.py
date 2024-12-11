@@ -177,6 +177,19 @@ def get_price_book(ticker):
     
     return pb_value_float   
 
+
+def get_debt_to_equity(ticker):
+    url = f"https://ycharts.com/companies/{ticker}"
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    debt_equity_link = soup.find('a', string='Debt to Equity Ratio')
+    if debt_equity_link:
+        td = debt_equity_link.find_parent('td')
+        value_td = td.find_next('td', class_='text-right')
+        if value_td:
+            return float(value_td.text.strip())
+    return 0
+
 """Price to FFO"""
 def get_pffo(ticker):
     try:
@@ -277,8 +290,9 @@ def get_business_details(stock_info):
     except Exception as e:
         print(f"Error getting business details: {e}")
 
-def get_investment_thesis(stock_info):
+def get_investment_thesis(ticker, stock_info):
     try:
+        de = get_debt_to_equity(ticker)
         print("\nINVESTMENT THESIS")
 
         print("\nFinancial Health:")
@@ -286,8 +300,9 @@ def get_investment_thesis(stock_info):
             print(f"• Cash Position: ${stock_info['totalCash']/1e9:.1f}B")
         if stock_info.get('totalDebt'):
             print(f"• Total Debt: ${stock_info['totalDebt']/1e9:.1f}B")
-        if stock_info.get('debtToEquity'):
-            print(f"• Debt to Equity: {stock_info['debtToEquity']:.2f}")
+        # if stock_info.get('debtToEquity'):
+        # print(f"• Debt to Equity: {stock_info['debtToEquity']:.2f}")
+        print(f"• Debt to Equity: {de}")
         if stock_info.get('currentRatio'):
             if(stock_info.get('currentRatio') < 1):
                 print(f"• Current Ratio: {stock_info['currentRatio']:.2f}")
@@ -604,7 +619,7 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, co
 
         analysis_output = io.StringIO()
         sys.stdout = analysis_output
-        get_investment_thesis(all_content['info'])
+        get_investment_thesis(ticker,all_content['info'])
         get_risk_analysis(ticker)
         analysis_content = analysis_output.getvalue()
 
@@ -1040,39 +1055,80 @@ def main():
             comparable_current_ratio = []
             comparable_upside = []
             comparable_companies_selected = []
+
             for tick in comparable_companies:
                 try:
-                    if(tick.lower() == "private") :
+                    if tick.lower() == "private":
                         comparable_debt_equity.append(0)
                         comparable_current_ratio.append(0)
                         comparable_upside.append(0)
                     else:
+                        print(f"Fetching data for {tick}...")  # Debug print
                         comparable_info = yf.Ticker(tick)
                         comparable_stock_info = comparable_info.info
+                        
+                        # Store all content first
                         comparable_all_content = {
-                            'financials':comparable_info.financials,
+                            'financials': comparable_info.financials,
                             'info': comparable_info.info,
                             'income_stmt': comparable_info.income_stmt,
                             'balance_sheet': comparable_info.balance_sheet,
                             'news': comparable_info.news,
-                            'history_data':comparable_info.history(start=start_date, end=end_date)
-  }
+                            'history_data': comparable_info.history(start=start_date, end=end_date)
+                        }
                         comparable_yf_fetched_information[tick] = comparable_all_content
-
-                        comparable_debt_equity.append(comparable_stock_info['debtToEquity'])
-                        comparable_current_ratio.append(comparable_stock_info['currentRatio'])
-                        current_price = comparable_stock_info.get('currentPrice', comparable_stock_info.get('regularMarketPrice'))
-                        upside = ((comparable_stock_info['targetMeanPrice'] / current_price) - 1) * 100
+                        
+                        # Safe get for debt to equity
+                        # de_ratio = comparable_stock_info.get('debtToEquity', 0)
+                        de_ratio = get_debt_to_equity(tick)
+                        comparable_debt_equity.append(de_ratio)
+                        
+                        # Safe get for current ratio
+                        curr_ratio = comparable_stock_info.get('currentRatio', 0)
+                        comparable_current_ratio.append(curr_ratio)
+                        
+                        # Safe get for prices and upside calculation
+                        current_price = comparable_stock_info.get('currentPrice', comparable_stock_info.get('regularMarketPrice', 0))
+                        target_price = comparable_stock_info.get('targetMeanPrice', current_price)
+                        
+                        if current_price and target_price:  # Only calculate if both values exist
+                            upside = ((target_price / current_price) - 1) * 100
+                        else:
+                            upside = 0
+                            
                         comparable_upside.append(upside)
                         comparable_companies_selected.append(tick)
-                except:
+                        
+                        print(f"Successfully processed {tick}")  # Debug print
+                        
+                except Exception as e:
+                    print(f"Error processing {tick}: {str(e)}")  # Debug print
                     comparable_debt_equity.append(0)
                     comparable_current_ratio.append(0)
                     comparable_upside.append(0)
 
-            comparable_de_mean = sum(comparable_debt_equity) / len(comparable_debt_equity)
-            comparable_cr_mean = sum(comparable_current_ratio) / len(comparable_current_ratio)
-            comparable_up_mean = sum(comparable_upside) / len(comparable_upside)
+            # Calculate means with safety checks
+            if len(comparable_debt_equity) > 0:
+                comparable_de_mean = sum(comparable_debt_equity) / len(comparable_debt_equity)
+            else:
+                comparable_de_mean = 0
+
+            if len(comparable_current_ratio) > 0:
+                comparable_cr_mean = sum(comparable_current_ratio) / len(comparable_current_ratio)
+            else:
+                comparable_cr_mean = 0
+
+            if len(comparable_upside) > 0:
+                comparable_up_mean = sum(comparable_upside) / len(comparable_upside)
+            else:
+                comparable_up_mean = 0
+
+            # Debug print final results
+            print(f"\nFinal Results:")
+            print(f"Number of companies processed : {len(comparable_companies_selected)}")
+            print(f"Debt/Equity values            : {comparable_debt_equity}")
+            print(f"Current Ratio values          : {comparable_current_ratio}")
+            print(f"Upside values                 : {comparable_upside}\n")
 
             comparable_metrics = []
             for metric in final_metrics:
