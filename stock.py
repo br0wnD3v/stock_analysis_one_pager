@@ -187,7 +187,9 @@ def get_debt_to_equity(ticker):
         td = debt_equity_link.find_parent('td')
         value_td = td.find_next('td', class_='text-right')
         if value_td:
-            return float(value_td.text.strip())
+            value = float(value_td.text.strip())
+            # print("For ",ticker,":",float(value_td.text.strip()))
+            return value if value > 0 else 0
     return 0
 
 """Price to FFO"""
@@ -511,10 +513,11 @@ def format_metric_value(metric_name, value):
     """
     Format metric values with appropriate decimal places
     """
-    if metric_name == "Dividend Yield":
-        return f"{value:.2f}%"
-    else:
-        return f"{value:.2f}"
+    # if metric_name == "Dividend Yield":
+    print("metric value",value)
+    return f"{value:.1f}"
+    # else:
+        # return f"{value:.2f}"
 
 def get_metric_value(ticker, metric_name):
     """
@@ -846,14 +849,14 @@ def create_pdf_report(ticker, all_content, final_metrics, comparable_metrics, co
                         stock_de = float(line.split(": ")[1])
                         color_hex = get_ratio_color("Debt to Equity", stock_de, comparable_debt_equity)
                         financial_insights.append(Paragraph(
-                            f"• Debt to Equity: <font color='{color_hex}'>{stock_de:.2f}</font> (Peer avg: {comparable_debt_equity:.2f})", 
+                            f"• Debt to Equity: <font color='{color_hex}'>{stock_de:.1f}</font> (Peer avg: {comparable_debt_equity:.1f})", 
                             normal_style
                         ))
                     elif "Current Ratio:" in line:
                         stock_cr = float(line.split(": ")[1])
                         color_hex = get_ratio_color("Current Ratio", stock_cr, comparable_current_ratio)
                         financial_insights.append(Paragraph(
-                            f"• Current Ratio: <font color='{color_hex}'>{stock_cr:.2f}</font> (Peer avg: {comparable_current_ratio:.2f})", 
+                            f"• Current Ratio: <font color='{color_hex}'>{stock_cr:.1f}</font> (Peer avg: {comparable_current_ratio:.1f})", 
                             normal_style
                         ))
                     else:
@@ -1059,9 +1062,10 @@ def main():
             for tick in comparable_companies:
                 try:
                     if tick.lower() == "private":
-                        comparable_debt_equity.append(0)
-                        comparable_current_ratio.append(0)
-                        comparable_upside.append(0)
+                        continue
+                        # comparable_debt_equity.append(0)
+                        # comparable_current_ratio.append(0)
+                        # comparable_upside.append(0)
                     else:
                         print(f"Fetching data for {tick}...")  # Debug print
                         comparable_info = yf.Ticker(tick)
@@ -1081,11 +1085,13 @@ def main():
                         # Safe get for debt to equity
                         # de_ratio = comparable_stock_info.get('debtToEquity', 0)
                         de_ratio = get_debt_to_equity(tick)
-                        comparable_debt_equity.append(de_ratio)
+                        if de_ratio > 0 :
+                            comparable_debt_equity.append(de_ratio)
                         
                         # Safe get for current ratio
                         curr_ratio = comparable_stock_info.get('currentRatio', 0)
-                        comparable_current_ratio.append(curr_ratio)
+                        if curr_ratio > 0:
+                            comparable_current_ratio.append(curr_ratio)
                         
                         # Safe get for prices and upside calculation
                         current_price = comparable_stock_info.get('currentPrice', comparable_stock_info.get('regularMarketPrice', 0))
@@ -1096,16 +1102,17 @@ def main():
                         else:
                             upside = 0
                             
-                        comparable_upside.append(upside)
+                        if upside > 0 :
+                            comparable_upside.append(upside)
                         comparable_companies_selected.append(tick)
                         
                         print(f"Successfully processed {tick}")  # Debug print
                         
                 except Exception as e:
                     print(f"Error processing {tick}: {str(e)}")  # Debug print
-                    comparable_debt_equity.append(0)
-                    comparable_current_ratio.append(0)
-                    comparable_upside.append(0)
+                    # comparable_debt_equity.append(0)
+                    # comparable_current_ratio.append(0)
+                    # comparable_upside.append(0)
 
             # Calculate means with safety checks
             if len(comparable_debt_equity) > 0:
@@ -1126,7 +1133,7 @@ def main():
             # Debug print final results
             print(f"\nFinal Results:")
             print(f"Number of companies processed : {len(comparable_companies_selected)}")
-            print(f"Debt/Equity values            : {comparable_debt_equity}")
+            print(f"Debt to Equity values         : {comparable_debt_equity}")
             print(f"Current Ratio values          : {comparable_current_ratio}")
             print(f"Upside values                 : {comparable_upside}\n")
 
